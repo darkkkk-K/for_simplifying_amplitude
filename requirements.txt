@@ -1,8 +1,4 @@
-# Python 3.12; choose the torch CPU/CUDA build for your machine.
+# Python3.12; install a torch CPU/CUDA build for your machine.
 torch==2.7.1
 numpy==2.3.1
-matplotlib==3.10.0
-scikit-learn==1.5.2
-threadpoolctl==3.5.0
-scipy==1.15.3
-# Symbolic engine: install the matching forsythia-hep wheel separately.
+# forsythia-hep support: zhangrunke@itp.ac.cn

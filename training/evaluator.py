@@ -1,15 +1,5 @@
 import torch
-from typing import List, Literal, Optional
-from typing import Dict, List, Tuple, Any
 import torch.nn.functional as F
-from data.tokenizer import tokenize
-from data.generation import data_gen_for_pre
-from models.encoder import ClusteringMachine1
-from training.loss import NTXentloss
-'''
-用于评估第一层聚类器的聚类效果
-'''
-
 def comprehensive_evaluate(src:torch.Tensor,
                 output:torch.Tensor,
                 device:torch.device):  # 输入是[B,T,seq_len](神经网络输入)以及[B,T,D](神经网络输出)张量，已完成掩码
@@ -32,26 +22,3 @@ def comprehensive_evaluate(src:torch.Tensor,
     energy = (avg_sim/2).sum(dim=0).item()  # 得到总能量，要求越接近0越好
 
     return diff_avg, energy
-'''
-device = torch.device("cuda")
-cret = NTXentloss(temperature= 0.1)
-test_model = ClusteringMachine1(
-        vocab_size = 46,
-        emb_dim = 16,
-        numhead = 8,
-        numenc1 = 3,
-        fnn_dim = 64,
-        dropout = 0.1
-    ).to(device)
-test_model.eval()
-src = data_gen(3,6)
-src_in = tokenize(src, input_batch=True, device=device)
-print(src_in)
-output = test_model(src_in)
-print(output)
-loss = cret(output)
-diff, energy = comprehensive_evaluate(src = src_in, output=output, device=device)
-print(diff)
-print(energy)
-print(loss)
-'''

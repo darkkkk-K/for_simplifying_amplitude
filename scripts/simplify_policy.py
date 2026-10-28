@@ -20,13 +20,13 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from project.pretraining.encoder import read_checkpoint, construct_encoder
-from project.reducibility.features import structures, validate
-from project.reducibility.generation import amplitude_config
-from project.rl.early_fusion_policy import sample_one
-from project.rl.legal_actions import UnsupportedExpression
-from project.rl.restricted_inference import select_argmax
-from project.rl.restricted_policy import RestrictedActorCritic, SCHEMA, build_observation
+from models.loading import read_checkpoint, construct_encoder
+from data.features import structures, validate
+from data.generation import demo_amplitude_config as amplitude_config
+from models.policy import sample_one
+from data.symbolic import UnsupportedExpression
+from models.policy import select_argmax
+from models.policy import RestrictedActorCritic, SCHEMA, build_observation
 
 if TYPE_CHECKING:
     from forsythia_hep import SpExpr
@@ -42,7 +42,7 @@ DEMO_SCRAMBLE_STEPS = 16        # 扰乱尝试次数，不保证每次都改变�
 DEMO_TOPK = 1                  # 1 = argmax；>1 = top-k内按softmax概率采样。
 DEMO_BUDGET_STEPS = 36
 # 五点联合60轮后，再以5.2:4.3:4.2=24:4:4追加36轮的终点；旧模型可用--policy指定。
-DEFAULT_POLICY = ROOT / "artifacts/backups/course52_resume36_20261027_v1/course52_resume_round036/round_036.pt"
+DEFAULT_POLICY = ROOT / "artifacts/models/rl/policy_096.pt"
 DEFAULT_ENCODER = ROOT / "artifacts/models/pretrained/temp15_final_model_sl_256.pth"
 MAX_TERMS = 128
 MAX_TOKENS_PER_TERM = 128

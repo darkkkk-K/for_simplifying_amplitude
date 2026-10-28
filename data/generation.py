@@ -1,5 +1,6 @@
-from forsythia_hep import *
-from typing import List, Tuple, Optional, Dict, Any, Callable, Iterator
+"""Physical configurations, contrastive groups, and complete amplitudes."""
+from __future__ import annotations
+from typing import List,Tuple,Optional,Dict,Any,Callable,Iterator
 import os
 import numpy as np
 import random
@@ -8,23 +9,15 @@ import pickle
 import gzip
 from random import shuffle
 import math
-
-
-
-'''
-A = random_monomial([-1, 1, 2, -2], 10)
-print(A)
-print(A.tokenize())
-B = random_apply_schouten(A, 2)
-print(B[1].tokenize())
-C = random_apply_momentum_conservation(A,4,1)
-print(C[1].tokenize())
-'''
-'''
-根据量纲和螺旋度构建散射振幅数据集。所有振幅外腿螺旋度之和应为整数(*2后为偶数)，振幅量纲应该大于等于所有外腿粒子螺旋度绝对值之和，
-且如果sum 2h_i % 4 == 0，dim为偶数，若sum 2h_i % 4 !=0, 则dim为奇数，且螺旋度为负的粒子螺旋度之和要为整数
-'''
-
+def random_monomial(*args,**kwargs):
+    import forsythia_hep as api
+    return api.random_monomial(*args,**kwargs)
+def random_apply_schouten(*args,**kwargs):
+    import forsythia_hep as api
+    return api.random_apply_schouten(*args,**kwargs)
+def random_apply_momentum_conservation(*args,**kwargs):
+    import forsythia_hep as api
+    return api.random_apply_momentum_conservation(*args,**kwargs)
 def amplitude_config_gen(point: int,
                          dimension: int)->Tuple[List[int], int]:
     '''
@@ -68,7 +61,6 @@ def amplitude_config_gen(point: int,
         hels_config[neg_odd_1st_global_idx] = -hels_config[neg_odd_1st_global_idx]
         return hels_config.tolist(), dim
 
-B = amplitude_config_gen(4, 6)
 
 def randomly_scramble(amp_config: Tuple)->List[List[str]]:
     '''
@@ -123,11 +115,6 @@ def randomly_scramble(amp_config: Tuple)->List[List[str]]:
             amp_scrambled_list = amp_scrambled.tokenize()
     return amp_scrambled_list
 
-'''
-sample = randomly_scramble(B)
-print(sample)
-'''
-
 
 def data_gen_for_pre(total_samples:int = 10000000,
     chunk_size: int = 100000, # 分块大小就设置为batch_size
@@ -179,6 +166,7 @@ def data_gen_for_pre(total_samples:int = 10000000,
          # 返回生成器用于流式处理
          return chunked_generator()
 
+
 def _save_to_file(data_generator: Iterator, filename: str, output_dir:str="./dataset",compress: bool = True):
     """将数据保存到文件"""
     os.makedirs(output_dir, exist_ok=True)
@@ -193,6 +181,7 @@ def _save_to_file(data_generator: Iterator, filename: str, output_dir:str="./dat
         with open(filepath, 'wb') as f:
             for chunk in data_generator:
                 pickle.dump(chunk, f)
+
 
 def load_dataset(filename: str) -> Iterator[List[Any]]:
     """从文件加载数据集"""
@@ -210,115 +199,27 @@ def load_dataset(filename: str) -> Iterator[List[Any]]:
                     yield pickle.load(f)
                 except EOFError:
                     break
-
-'''
-data_gen_for_pre(total_samples = 10000,
-                 chunk_size = 50000,
-                 if_chunk=False,
-                 output_file = "amp_data.pkl.gz",
-                 compress = False)
-'''
-
-def generate_distributed_dataset(total_samples:int=10000000,
-         samples_per_file:int=500000,
-         data_dir:str='./dataset',
-         val_split:float=0.25,
-         temperature:float=1.8,
-         worker_id:int=0,
-         random_seed:int=42
-         ):
-    '''
-    分布式数据生成器，将数据分为800个文件，每个文件12800个样本。同时会生成元数据文件以记录样本总量以及单文件文件样本-全局索引映射。work_id支持多进程处理
-    '''
-    random.seed(random_seed+worker_id)
-    np.random.seed(random_seed+worker_id)
-    num_train_samples = math.ceil((1-val_split)*total_samples)
-    num_val_samples = total_samples - num_train_samples
-    num_train_files = (num_train_samples + samples_per_file - 1) // samples_per_file
-    num_val_files = (num_val_samples + samples_per_file - 1) // samples_per_file
-    train_dir = os.path.join(data_dir, "train_data")
-    val_dir = os.path.join(data_dir, "val_data")
-    os.makedirs(train_dir, exist_ok=True)
-    os.makedirs(val_dir, exist_ok=True)
-    print(f"开始生成数据集并划分训练集/验证集...")
-    print(f"总样本数: {total_samples:,}")
-    print(f"训练样本数: {num_train_samples:,}")
-    print(f"每个文件样本数: {samples_per_file:,}")
-    print(f"文件数量: {num_train_files + num_val_files}")
-    print(f"输出目录: {data_dir}")
-
-    metadata_train = {}
-    metadata_val = {}
-    metadata_train["total_num_samples"] = num_train_samples
-    metadata_train["num_files"] = num_train_files
-    metadata_train["filesample_index_mapping"] = {}
-    metadata_val["total_num_samples"] = num_val_samples
-    metadata_val["num_files"] = num_val_files
-    metadata_val["filesample_index_mapping"] = {}
-    current_idx_train = 0 + worker_id*num_train_samples
-    current_idx_val = 0 + worker_id*num_val_samples
-    for i in range(num_train_files):
-        # 计算当前文件应包含的样本数（最后一个文件可能较少）
-        current_file_samples = min(samples_per_file, num_train_samples - i * samples_per_file)
-
-        filename = f"amp_data_part{i+num_train_files*worker_id:03d}.pkl.gz"
-        file_path = os.path.join(train_dir, filename)
-        print(f"生成文件{i+worker_id+1}/{num_train_files}: {filename}")
-        data_gen_for_pre(
-            total_samples=current_file_samples,
-            chunk_size=10000,
-            if_chunk=False,
-            output_file=filename,
-            output_dir=train_dir,
-            compress=True,
-            temperature=temperature)
-        metadata_train["filesample_index_mapping"][file_path]={
-                 'start_idx': current_idx_train,
-                 'end_idx': current_idx_train+current_file_samples-1,
-                 'num_samples': current_file_samples}
-        current_idx_train += current_file_samples
-    '''
-    metadata_train_name = f"metadata{worker_id:02d}.pkl.gz"
-    metadata_train_path = os.path.join(train_dir, metadata_train_name)
-    with gzip.open(metadata_train_path, 'wb') as f:
-        pickle.dump(metadata_train, f)
-    '''
-    print(f"训练集生成完成！文件保存在: {train_dir}")
-    for i in range(num_val_files):
-        # 计算当前文件应包含的样本数（最后一个文件可能较少）
-        current_file_samples = min(samples_per_file, num_val_samples - i * samples_per_file)
-
-        filename = f"amp_data_part{i+num_val_files*worker_id:03d}.pkl.gz"
-        file_path = os.path.join(val_dir, filename)
-        print(f"生成文件{i+worker_id+1}/{num_val_files}: {filename}")
-        data_gen_for_pre(
-            total_samples=current_file_samples,
-            chunk_size=10000,
-            if_chunk=False,
-            output_file=filename,
-            output_dir=val_dir,
-            compress=True,
-            temperature=temperature)
-        metadata_val["filesample_index_mapping"][file_path]={
-                 'start_idx': current_idx_val,
-                 'end_idx': current_idx_val+current_file_samples-1,
-                 'num_samples': current_file_samples}
-        current_idx_val += current_file_samples
-    '''
-    metadata_val_name = f"metadata{worker_id:02d}.pkl.gz"
-    metadata_val_path = os.path.join(val_dir, metadata_val_name)
-    with gzip.open(metadata_val_path, 'wb') as f:
-        pickle.dump(metadata_val, f)
-    '''
-    print(f"验证集生成完成！文件保存在: {val_dir}")
-    return metadata_train, metadata_val
-
-
-'''
-# 测试生成数据集
-t_i = time.time()
-generate_distributed_dataset(total_samples=20000, samples_per_file=1000)
-t_f = time.time()
-delta_t = t_f-t_i
-print(f"生成数据集用时：{delta_t:.2f}秒")
-'''
+def demo_amplitude_config(point, dimension, rng, nrng):
+    """Adapted from data/generation.py; explicit RNG, no import-time side effects."""
+    if point not in (4, 5, 6) or dimension < 2:
+        raise ValueError('Unsupported configuration')
+    if dimension % 2 == 0:
+        total = 4 * rng.randint(0, min(dimension // 2, 5 * point // 4))
+    else:
+        total = 4 * rng.randint(0, min((dimension - 1) // 2, math.ceil((5 * point - 4) / 4))) + 2
+    values = nrng.multinomial(total, [1 / point] * point)
+    excessive = np.flatnonzero(values > 5)
+    excess = int(sum(values[excessive] - 5))
+    for _ in range(excess):
+        values[np.argmin(values)] += 1
+    values[excessive] = 5
+    signs = 2 * nrng.integers(0, 2, point) - 1
+    hels = (values * signs).tolist()
+    if -sum(h for h in hels if h < 0) % 2:
+        i = next(i for i, h in enumerate(hels) if h < 0 and h % 2)
+        hels[i] = -hels[i]
+    absolute = sum(abs(h) for h in hels)
+    if absolute % 2 or dimension < absolute // 2 or (
+            sum(max(-h, 0) for h in hels) + dimension - absolute // 2) % 2:
+        raise ValueError('Generated invalid configuration')
+    return hels

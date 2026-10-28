@@ -1,11 +1,5 @@
 import torch
 import torch.nn.functional as F
-import math
-
-'''
-本文件为预训练损失函数
-'''
-
 def remove_diagonal(tensor)-> torch.Tensor:
     """
     移除张量的对角线元素并调整为 [n-1, n-1] 的形状
@@ -23,7 +17,6 @@ def remove_diagonal(tensor)-> torch.Tensor:
     non_diag_elements = tensor[mask]
     # 将非对角线元素重新塑形为 [n-1, n-1]
     return non_diag_elements.reshape(n, n-1)
-
 
 
 class NTXentloss(torch.nn.Module):
@@ -67,14 +60,3 @@ class NTXentloss(torch.nn.Module):
 
 
         return batch_total_loss / num_total_term if num_total_term > 0 else torch.tensor(0.0)   # 直接得到预训练中一个batch的loss
-'''
-loss_test = NTXentloss(temperature=0.1)
-A = torch.tensor([[[0.92,0.2,(1-0.92**2-0.2**2)**0.5],[0.93,-0.18,(1-0.93**2-0.18**2)**0.5]],[[-0.91,0.19,(1-0.91**2-0.19**2)**0.5],[-0.94,-0.12,(1-0.94**2-0.12**2)**0.5]]])
-B = torch.tensor([[[0.85,0.3,(1-0.85**2-0.3**2)**0.5],[0.86,-0.2,-(1-0.86**2-0.2**2)**0.5]],[[-0.87,0.13,(1-0.87**2-0.13**2)**0.5],[-0.90,-0.12,(1-0.90**2-0.12**2)**0.5]]])
-
-loss1 = loss_test(A)
-loss2 = loss_test(B)
-
-print(loss1)
-print(loss2)
-'''

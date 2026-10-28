@@ -1,127 +1,94 @@
-from data.generation import generate_distributed_dataset
-import json
-import random
-import multiprocessing
-import time
-import pickle
+"""Generate encoder contrastive groups or complete RL training expressions."""
+import argparse
+from collections import Counter
 import gzip
-import os
+import hashlib
+import json
+from pathlib import Path
+import pickle
+import random
+import sys
+
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
 
 
-with open('configs/pretrain.json', 'r') as f:   # 'r'表示只可读
-    configs = json.load(f)
-
-
-
-class DatasetGenerator:
-    '''
-    并行数据集生成类
-    '''
-    def __init__(self, output_dir='./datasets/pretrain', num_processes=16, total_samples:int= configs["model_configs"]["model_config1"]['num_samples'],
-                 samples_per_file=configs["model_configs"]["model_config1"]['samples_per_file'], data_dir='./datasets/pretrain',
-            temperature=configs["model_configs"]["model_config1"]['temperature'], val_split = configs["model_configs"]["model_config1"]['val_split']):
-        self.output_dir = output_dir
-        self.num_processes = num_processes
-        self.completed_tasks = 0
-        self.failed_tasks = 0
-        self.total_files_generated = 0
-        self.start_time = None
-        self.num_total_samples = total_samples
-        self.samples_perfile = samples_per_file
-        self.datadir = data_dir
-        self.temperature = temperature
-        self.val_split = val_split
-
-    def generate_dataset(self):
-        self.start_time = time.time()
-
-        print(f"开始生成数据集")
-        print(f"输出目录: {self.output_dir}")
-        print(f"进程数: {self.num_processes}")
-        print("-" * 50)
-        num_per_process = self.num_total_samples // self.num_processes
-        metadata_train = {}
-        metadata_val = {}
-        num_total_samples_train = 0
-        num_files_train = 0
-        filesample_index_mapping_train = {}
-        num_total_samples_val = 0
-        num_files_val = 0
-        filesample_index_mapping_val = {}
-        with multiprocessing.Pool(processes=self.num_processes) as pool:
-            tasks = [(num_per_process, self.samples_perfile, self.datadir, self.val_split, self.temperature, i) for i in range(self.num_processes)]
-            async_results = []  # 初始化任务列表
-
-            # 主进程提交任务队列
-            for task_args in tasks:
-                async_result = pool.apply_async(generate_distributed_dataset, task_args)
-                async_results.append(async_result)
-                print(f"已提交任务 {task_args[5]}")
-
-            print("所有任务提交完成，等待文件生成...")
-
-            for i, async_result in enumerate(async_results):
-                try:
-                    num_total_samples_train += async_result.get()[0]['total_num_samples']
-                    num_files_train += async_result.get()[0]['num_files']
-                    filesample_index_mapping_train.update(async_result.get()[0]['filesample_index_mapping'])
-
-                    num_total_samples_val += async_result.get()[1]['total_num_samples']
-                    num_files_val += async_result.get()[1]['num_files']
-                    filesample_index_mapping_val.update(async_result.get()[1]['filesample_index_mapping'])
-                    print(f"✅任务 {i} 完成")
-
-                except multiprocessing.TimeoutError:
-                    print(f"⏰ 任务 {i} 超时!")
-                except Exception as e:
-                    print(f"❌ 任务 {i} 异常: {e}")
-            metadata_train["total_num_samples"] = num_total_samples_train
-            metadata_train["num_files"] = num_files_train
-            metadata_train["filesample_index_mapping"] = filesample_index_mapping_train
-            metadata_val["total_num_samples"] = num_total_samples_val
-            metadata_val["num_files"] = num_files_val
-            metadata_val["filesample_index_mapping"] = filesample_index_mapping_val
-
-            train_dir = os.path.join(self.datadir, "train_data")
-            val_dir = os.path.join(self.datadir, "val_data")
-            metadata_train_name = "metadata.pkl.gz"
-            metadata_train_path = os.path.join(train_dir, metadata_train_name)
-            with gzip.open(metadata_train_path, 'wb') as f:
-                pickle.dump(metadata_train, f)
-            metadata_val_name = "metadata.pkl.gz"
-            metadata_val_path = os.path.join(val_dir, metadata_val_name)
-            with gzip.open(metadata_val_path, 'wb') as f:
-                pickle.dump(metadata_val, f)
-            self.endtime = time.time()
-            print(f"任务用时{self.endtime-self.start_time:.2f}s")
-
-
-
-    def progress_callback(self, result):
-        """进度回调函数"""
-        self.completed_tasks += 1
-
-        if result['success']:
-            file_count = len(result['generated_files'])
-            self.total_files_generated += file_count
-            elapsed = time.time() - self.start_time
-            print(f"任务 {result['chunk_id']} 完成! "
-                  f"生成 {file_count} 个文件, "
-                  f"进度: {self.completed_tasks}/{self.total_tasks} "
-                  f"({elapsed:.1f}s)")
-        else:
-            self.failed_tasks += 1
-            print(f"任务 {result['chunk_id']} 失败!")
-
-    def error_callback(self, error):
-        """错误回调函数"""
-        self.failed_tasks += 1
-        print(f"任务执行出错: {error}")
-
+def main():
+    p = argparse.ArgumentParser(description=__doc__)
+    p.add_argument('--stage', choices=('encoder', 'rl'), default='rl')
+    p.add_argument('--count', type=int, default=1024)
+    p.add_argument('--n-point', type=int, choices=(4, 5, 6), default=4)
+    p.add_argument('--dimension-min', type=int, default=2)
+    p.add_argument('--dimension-max', type=int, default=10)
+    p.add_argument('--min-terms', type=int, default=2)
+    p.add_argument('--max-terms', type=int, default=36)
+    p.add_argument('--scramble-steps', type=int, default=32)
+    p.add_argument('--candidate-cap', type=int, default=24576)
+    p.add_argument('--seed', type=int, default=103)
+    p.add_argument('--output', type=Path)
+    p.add_argument('--run', action='store_true')
+    args = p.parse_args()
+    print(json.dumps(vars(args), default=str, indent=2))
+    if not args.run:
+        return
+    if args.output is None or args.output.exists() or not 1 <= args.count or not 2 <= args.dimension_min <= args.dimension_max:
+        p.error('Use a new --output directory and valid count/dimension range.')
+    if not 1 <= args.min_terms <= args.max_terms <= 128 or args.scramble_steps < 0:
+        p.error('Invalid term bounds or scramble steps.')
+    import numpy as np
+    from data.generation import amplitude_config_gen, data_gen_for_pre
+    random.seed(args.seed); np.random.seed(args.seed)
+    args.output.mkdir(parents=True)
+    if args.stage == 'encoder':
+        all_groups = data_gen_for_pre(total_samples=args.count, output_file=None, if_chunk=False)
+        groups = next(all_groups)
+        split = max(1, int(len(groups)*.8))
+        for label, samples in (('train_data', groups[:split]), ('val_data', groups[split:])):
+            if not samples:
+                raise ValueError('Need enough groups for both train and validation')
+            folder = args.output/label; folder.mkdir()
+            shard = folder/'amp_data_part_000.pkl.gz'
+            with gzip.open(shard, 'wb') as f: pickle.dump(samples, f)
+            metadata = dict(total_num_samples=len(samples), num_files=1, filesample_index_mapping={str(shard.resolve()):
+                dict(start_idx=0, end_idx=len(samples)-1, num_samples=len(samples))})
+            with gzip.open(folder/'metadata.pkl.gz', 'wb') as f: pickle.dump(metadata, f)
+        return
+    import forsythia_hep as api
+    from data.features import validate, expression_key
+    rows, originals, seen, counts = [], [], set(), Counter()
+    for _ in range(args.candidate_cap):
+        if len(rows) == args.count: break
+        counts['candidates'] += 1
+        hels, dim = amplitude_config_gen(args.n_point, random.randint(args.dimension_min, args.dimension_max))
+        hels = list(map(int, hels))
+        source = 0*api.abk(1, 2)
+        for _ in range(random.randint(1, 5)):
+            counts['monomial_calls'] += 1
+            mono = api.random_monomial(hels, dim)
+            validate(mono.tokenize(), args.n_point, dim, hels)
+            source += random.choice((-3, -2, -1, 1, 2, 3))*mono
+        source = source.normal_order().expand()
+        clean = source.tokenize(); origin = expression_key(clean, args.n_point)
+        if not 1 <= len(clean) <= 5 or origin in seen: continue
+        current = source
+        for _ in range(args.scramble_steps):
+            counts['random_identity_calls'] += 1
+            current = (api.random_apply_schouten(current, 1) if random.random() < .5
+                       else api.random_apply_momentum_conservation(current, args.n_point, 1))[1]
+            if len(current.tokenize()) > 128: break
+        tokens = current.tokenize(); key = expression_key(tokens, args.n_point)
+        if not max(args.min_terms, len(clean)+1) <= len(tokens) <= args.max_terms or key in seen: continue
+        validate(tokens, args.n_point, dim, hels)
+        sid = hashlib.sha256(repr(clean).encode()).hexdigest()
+        rows.append(dict(index=len(rows), split='train', source_id=sid, n_point=args.n_point,
+                         dimension=dim, helicities_twice=hels, terms=len(tokens), tokens=tokens))
+        originals.append(dict(source_id=sid, source_terms=len(clean), tokens=clean))
+        seen.update((origin, key))
+        if len(rows) % 128 == 0: print(f'{len(rows)}/{args.count}', flush=True)
+    for name, value in [('train.json', rows), ('origins.json', originals), ('generation.json', dict(counts=counts, settings=vars(args)))]:
+        (args.output/name).write_text(json.dumps(value, default=str, indent=2), encoding='utf-8')
+    if len(rows) != args.count: raise RuntimeError('Candidate budget reached; partial data saved.')
 
 
 if __name__ == '__main__':
-    # 对于Windows，有时还需要添加这行
-    multiprocessing.freeze_support()
-    gendata = DatasetGenerator()
-    gendata.generate_dataset()
+    main()

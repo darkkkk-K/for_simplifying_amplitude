@@ -1,0 +1,38 @@
+{
+  "seed": 103,
+  "rounds": 36,
+  "lanes": 32,
+  "horizon": 24,
+  "batch_size": 16,
+  "epochs": 2,
+  "learning_rate": 0.0001,
+  "entropy_coef": 0.001,
+  "gae_lambda": 0.93,
+  "gamma": 1.0,
+  "top_k": 8,
+  "beta": 0.4,
+  "c_punishment": 1.5,
+  "encoder": "artifacts/models/pretrained/temp15_final_model_sl_256.pth",
+  "save_rounds": [
+    12,
+    24,
+    36
+  ],
+  "pools": [
+    {
+      "name": "course52",
+      "path": "datasets/course52/train.json",
+      "quota": 24
+    },
+    {
+      "name": "course43",
+      "path": "datasets/course43/train.json",
+      "quota": 4
+    },
+    {
+      "name": "course42",
+      "path": "datasets/course42/train.json",
+      "quota": 4
+    }
+  ]
+}
