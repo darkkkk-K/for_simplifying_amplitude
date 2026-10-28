@@ -1,0 +1,11 @@
+{
+  "model_type": "ClusteringMachine1_RoPE",
+  "emb_dim": 768,
+  "numenc1": 3,
+  "numhead": 8,
+  "fnn_dim": 3072,
+  "pooling": "masked_sum_l2_normalize",
+  "contrastive_temperature": 0.15,
+  "checkpoint": "artifacts/models/pretrained/temp15_final_model_sl_256.pth",
+  "sha256": "eec09011072bebfb2306d4cdccda6b39713baedcb2834b18fd8306aa3b9730c6"
+}

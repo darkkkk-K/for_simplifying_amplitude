@@ -1,0 +1,24 @@
+{
+  "observation_schema": "expression_best_v1",
+  "encoder_dim": 768,
+  "encoder_frozen": true,
+  "trainable_parameters": 3606435,
+  "gamma": 1.0,
+  "gae_lambda": 0.93,
+  "ppo_clip": 0.2,
+  "train_topk": 8,
+  "entropy_coef": 0.001,
+  "learning_rate": 0.0001,
+  "beta": 0.4,
+  "c_punishment": 1.5,
+  "last_stage": {
+    "rounds": 36,
+    "lanes": 32,
+    "horizon": 24,
+    "batch_size": 16,
+    "epochs": 2,
+    "optimizer_updates": 3456
+  },
+  "checkpoint": "artifacts/models/rl/policy_096.pt",
+  "sha256": "5a2db96f83469e4a835466dc1d51c2f1dc61efeca1c95dfa347b2df185b2f4a4"
+}
